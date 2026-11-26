@@ -79,15 +79,14 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    // ★ここに自分のFirebase設定を貼り付けてください★
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-      projectId: "YOUR_PROJECT",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "000000000000",
-      appId: "1:000000000000:web:000000000000"
+      apiKey: "AIzaSyB4pTqFzS98hP4RoXUiQB10GPDnMeoM4ck",
+      authDomain: "web-chanbara.firebaseapp.com",
+      databaseURL: "https://web-chanbara-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "web-chanbara",
+      storageBucket: "web-chanbara.firebasestorage.app",
+      messagingSenderId: "352232117911",
+      appId: "1:352232117911:web:b6df15d8be374b20bcbbd2"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -148,7 +147,7 @@
 
     const state = {
       enemyHp: 100,
-      enemyGuardAngle: 0, // ラジアン（0 = 水平ガード、Math.PI/2 = 垂直ガード）
+      enemyGuardAngle: 0,
       swordAngle: 0,
       targetSwordAngle: 0,
       isGuarding: false,
@@ -195,10 +194,8 @@
       playSound("swing");
       state.slashEffect = { angle: slashAngle, alpha: 1.0, power };
 
-      // 敵のガード角度との差を計算（ガードと直交していればヒット）
       let diff = Math.abs(Math.sin(slashAngle - state.enemyGuardAngle));
       if (diff > 0.65) {
-        // ヒット！
         const dmg = Math.round(15 + power * 20);
         state.enemyHp = Math.max(0, state.enemyHp - dmg);
         state.shakeTime = 12;
@@ -214,7 +211,6 @@
           setTimeout(() => { state.enemyHp = 100; updateHpUI(); }, 2000);
         }
       } else {
-        // ガードされた！
         state.shakeTime = 6;
         state.message = "ガードされた！角度を変えろ！";
         state.messageColor = "#f87171";
@@ -248,7 +244,6 @@
       // 1. 敵（木人ダミー）の描画
       ctx.save();
       ctx.translate(cx, cy - 40);
-      // 胴体
       ctx.fillStyle = "#78350f";
       ctx.beginPath();
       ctx.roundRect(-55, -70, 110, 160, 24);
@@ -256,7 +251,6 @@
       ctx.strokeStyle = "#b45309";
       ctx.lineWidth = 4;
       ctx.stroke();
-      // 頭部
       ctx.fillStyle = "#92400e";
       ctx.beginPath();
       ctx.arc(0, -110, 38, 0, Math.PI * 2);
@@ -276,7 +270,7 @@
       ctx.restore();
       ctx.restore();
 
-      // 2. 斬撃エフェクト（光の軌跡）
+      // 2. 斬撃エフェクト
       if (state.slashEffect && state.slashEffect.alpha > 0) {
         ctx.save();
         ctx.translate(cx, cy - 40);
@@ -292,18 +286,16 @@
         state.slashEffect.alpha -= 0.06;
       }
 
-      // 3. プレイヤーの剣（手前視点）
+      // 3. プレイヤーの剣
       state.swordAngle += (state.targetSwordAngle - state.swordAngle) * 0.25;
       ctx.save();
       ctx.translate(cx, canvas.height - 60);
       if (state.isGuarding) {
-        // ガード時は横構えで手前に上げる
         ctx.translate(0, -160);
         ctx.rotate(Math.PI / 2);
       } else {
         ctx.rotate(state.swordAngle);
       }
-      // 刀身
       const grad = ctx.createLinearGradient(0, 0, 0, -280);
       grad.addColorStop(0, "#94a3b8");
       grad.addColorStop(1, "#f8fafc");
@@ -316,7 +308,6 @@
       ctx.lineTo(10, 0);
       ctx.closePath();
       ctx.fill();
-      // 鍔（つば）と柄
       ctx.fillStyle = "#f59e0b";
       ctx.fillRect(-26, -6, 52, 10);
       ctx.fillStyle = "#1e293b";
