@@ -76,15 +76,14 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getDatabase, ref, set, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    // ★tv.htmlと同じFirebase設定を貼り付けてください★
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-      projectId: "YOUR_PROJECT",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "000000000000",
-      appId: "1:000000000000:web:000000000000"
+      apiKey: "AIzaSyB4pTqFzS98hP4RoXUiQB10GPDnMeoM4ck",
+      authDomain: "web-chanbara.firebaseapp.com",
+      databaseURL: "https://web-chanbara-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "web-chanbara",
+      storageBucket: "web-chanbara.firebasestorage.app",
+      messagingSenderId: "352232117911",
+      appId: "1:352232117911:web:b6df15d8be374b20bcbbd2"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -95,7 +94,6 @@
     const guardBtn = document.getElementById("guard-btn");
     const debugEl = document.getElementById("sensor-debug");
 
-    // URLパラメータに ?room=1234 があれば自動入力
     const params = new URLSearchParams(window.location.search);
     if (params.get("room")) roomInput.value = params.get("room");
 
@@ -106,7 +104,6 @@
     let lastPoseSent = 0;
     let lastSwingTime = 0;
 
-    // センサー許可と接続開始
     connectBtn.addEventListener("click", async () => {
       const roomId = roomInput.value.trim();
       if (roomId.length !== 4) {
@@ -114,7 +111,6 @@
         return;
       }
 
-      // iOS 13+ センサー許可リクエスト
       try {
         if (typeof DeviceMotionEvent?.requestPermission === "function") {
           const motionRes = await DeviceMotionEvent.requestPermission();
@@ -128,7 +124,6 @@
         console.warn("Sensor permission error:", e);
       }
 
-      // スリープ防止
       if ("wakeLock" in navigator) {
         navigator.wakeLock.request("screen").catch(() => {});
       }
@@ -142,10 +137,8 @@
       window.addEventListener("devicemotion", handleMotion);
     });
 
-    // 傾きによる剣の角度同期（約25fpsに間引き）
     function handleOrientation(e) {
       if (!isConnected || e.gamma === null) return;
-      // iPhoneの左右の傾き(gamma)をラジアンに変換
       const rawRad = ((e.gamma - baseGamma) * Math.PI) / 180;
       currentAngle = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rawRad));
 
@@ -161,7 +154,6 @@
       }
     }
 
-    // スイング検知
     function handleMotion(e) {
       if (!isConnected || isGuarding) return;
       const acc = e.acceleration;
@@ -170,11 +162,9 @@
       const magnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
       const now = Date.now();
 
-      // しきい値 18 m/s^2 以上でスイング判定
       if (magnitude > 18 && now - lastSwingTime > 380) {
         lastSwingTime = now;
 
-        // 振った軸の比率から斬撃角度（縦斬り・横斬り・斜め斬り）を算出
         const slashAngle = Math.atan2(acc.x, -acc.y);
         const roomId = roomInput.value.trim();
         set(ref(db, `chanbara/${roomId}/slash`), {
@@ -185,7 +175,6 @@
       }
     }
 
-    // ガードボタン（タッチ長押し）
     const setGuard = (active) => {
       isGuarding = active;
       guardBtn.classList.toggle("guarding", active);
@@ -199,7 +188,6 @@
     guardBtn.addEventListener("touchstart", (e) => { e.preventDefault(); setGuard(true); });
     guardBtn.addEventListener("touchend", (e) => { e.preventDefault(); setGuard(false); });
 
-    // 正面キャリブレーション
     document.getElementById("calib-btn").addEventListener("click", () => {
       baseGamma += (currentAngle * 180) / Math.PI;
     });
