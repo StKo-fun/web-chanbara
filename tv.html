@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Web Chanbara - TV Screen</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #hud-top {
+      position: absolute; top: 20px; left: 24px; right: 24px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      pointer-events: none;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      padding: 14px 18px;
+      border-radius: 12px;
+      pointer-events: auto;
+    }
+    .room-box { display: flex; gap: 16px; align-items: center; }
+    #qrcode { background: #fff; padding: 6px; border-radius: 8px; }
+    .room-code { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #38bdf8; }
+    .status { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    .status.connected { color: #4ade80; font-weight: bold; }
+    .hp-container { width: 320px; }
+    .hp-label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 6px; }
+    .hp-bar-bg { width: 100%; height: 18px; background: #334155; border-radius: 9px; overflow: hidden; }
+    .hp-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ef4444, #f97316); transition: width 0.2s; }
+    .controls-hint { margin-top: 10px; display: flex; gap: 8px; }
+    button {
+      background: #334155; color: #fff; border: 1px solid #475569;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    button:hover { background: #475569; }
+  </style>
+</head>
+<body>
+  <div id="hud-top">
+    <div class="panel room-box">
+      <div id="qrcode"></div>
+      <div>
+        <div style="font-size:12px; color:#94a3b8;">ROOM ID</div>
+        <div class="room-code" id="room-id">----</div>
+        <div class="status" id="conn-status">iPhoneの接続待ち...</div>
+        <div class="controls-hint">
+          <button onclick="document.documentElement.requestFullscreen()">全画面表示</button>
+          <button onclick="simulateSlash()">テスト斬撃</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel hp-container">
+      <div class="hp-label">
+        <span>木人ダミー (CPU)</span>
+        <span id="hp-text">100 / 100</span>
+      </div>
+      <div class="hp-bar-bg">
+        <div class="hp-bar-fill" id="hp-fill"></div>
+      </div>
+      <div style="font-size:13px; color:#cbd5e1; margin-top:8px;" id="guide-text">
+        ガードの方向と「垂直」に斬り込め！
+      </div>
+    </div>
+  </div>
+
+  <canvas id="game"></canvas>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    // ★ここに自分のFirebase設定を貼り付けてください★
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "000000000000",
+      appId: "1:000000000000:web:000000000000"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // ルームIDとQRコード生成
+    const roomId = Math.floor(1000 + Math.random() * 9000).toString();
+    document.getElementById("room-id").textContent = roomId;
+
+    const controllerUrl = new URL("controller.html", window.location.href);
+    controllerUrl.searchParams.set("room", roomId);
+    new QRCode(document.getElementById("qrcode"), {
+      text: controllerUrl.toString(),
+      width: 84,
+      height: 84
+    });
+
+    // Web Audio API 効果音シンセサイザー
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+
+      if (type === "swing") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
+      } else if (type === "hit") {
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.start(now); osc.stop(now + 0.25);
+      } else if (type === "block") {
+        osc.type = "square";
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.12);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+      }
+    }
+
+    // ゲーム状態
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener("resize", resize);
+    resize();
+
+    const state = {
+      enemyHp: 100,
+      enemyGuardAngle: 0, // ラジアン（0 = 水平ガード、Math.PI/2 = 垂直ガード）
+      swordAngle: 0,
+      targetSwordAngle: 0,
+      isGuarding: false,
+      slashEffect: null,
+      shakeTime: 0,
+      message: "",
+      messageColor: "#fff",
+      messageTimer: 0
+    };
+
+    // 敵のガード方向を2.5秒ごとにランダム変更
+    setInterval(() => {
+      const patterns = [0, Math.PI / 2, Math.PI / 4, -Math.PI / 4];
+      state.enemyGuardAngle = patterns[Math.floor(Math.random() * patterns.length)];
+    }, 2500);
+
+    // Firebase リアルタイム受信
+    set(ref(db, `chanbara/${roomId}`), { connected: false });
+
+    onValue(ref(db, `chanbara/${roomId}/connected`), (snap) => {
+      if (snap.val() === true) {
+        const el = document.getElementById("conn-status");
+        el.textContent = "● コントローラー接続完了！";
+        el.classList.add("connected");
+      }
+    });
+
+    onValue(ref(db, `chanbara/${roomId}/pose`), (snap) => {
+      const val = snap.val();
+      if (!val) return;
+      state.targetSwordAngle = val.angle || 0;
+      state.isGuarding = !!val.guard;
+    });
+
+    let lastProcessedSlash = 0;
+    onValue(ref(db, `chanbara/${roomId}/slash`), (snap) => {
+      const val = snap.val();
+      if (!val || val.timestamp === lastProcessedSlash) return;
+      lastProcessedSlash = val.timestamp;
+      triggerSlash(val.angle, val.power);
+    });
+
+    function triggerSlash(slashAngle, power = 0.8) {
+      playSound("swing");
+      state.slashEffect = { angle: slashAngle, alpha: 1.0, power };
+
+      // 敵のガード角度との差を計算（ガードと直交していればヒット）
+      let diff = Math.abs(Math.sin(slashAngle - state.enemyGuardAngle));
+      if (diff > 0.65) {
+        // ヒット！
+        const dmg = Math.round(15 + power * 20);
+        state.enemyHp = Math.max(0, state.enemyHp - dmg);
+        state.shakeTime = 12;
+        state.message = `クリーンヒット! -${dmg}`;
+        state.messageColor = "#4ade80";
+        state.messageTimer = 45;
+        setTimeout(() => playSound("hit"), 40);
+
+        if (state.enemyHp === 0) {
+          state.message = "一本！勝利！ (自動リセット)";
+          state.messageColor = "#facc15";
+          state.messageTimer = 90;
+          setTimeout(() => { state.enemyHp = 100; updateHpUI(); }, 2000);
+        }
+      } else {
+        // ガードされた！
+        state.shakeTime = 6;
+        state.message = "ガードされた！角度を変えろ！";
+        state.messageColor = "#f87171";
+        state.messageTimer = 45;
+        setTimeout(() => playSound("block"), 40);
+      }
+      updateHpUI();
+    }
+
+    function updateHpUI() {
+      document.getElementById("hp-text").textContent = `${state.enemyHp} / 100`;
+      document.getElementById("hp-fill").style.width = `${state.enemyHp}%`;
+    }
+
+    window.simulateSlash = () => {
+      triggerSlash(state.enemyGuardAngle + Math.PI / 2, 0.9);
+    };
+
+    // 描画ループ
+    function render() {
+      ctx.save();
+      if (state.shakeTime > 0) {
+        state.shakeTime--;
+        ctx.translate((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18);
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2 + 20;
+
+      // 1. 敵（木人ダミー）の描画
+      ctx.save();
+      ctx.translate(cx, cy - 40);
+      // 胴体
+      ctx.fillStyle = "#78350f";
+      ctx.beginPath();
+      ctx.roundRect(-55, -70, 110, 160, 24);
+      ctx.fill();
+      ctx.strokeStyle = "#b45309";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      // 頭部
+      ctx.fillStyle = "#92400e";
+      ctx.beginPath();
+      ctx.arc(0, -110, 38, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 敵の防御木刀（ガードライン）
+      ctx.save();
+      ctx.rotate(state.enemyGuardAngle);
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 14;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-120, 0);
+      ctx.lineTo(120, 0);
+      ctx.stroke();
+      ctx.restore();
+      ctx.restore();
+
+      // 2. 斬撃エフェクト（光の軌跡）
+      if (state.slashEffect && state.slashEffect.alpha > 0) {
+        ctx.save();
+        ctx.translate(cx, cy - 40);
+        ctx.rotate(state.slashEffect.angle);
+        ctx.strokeStyle = `rgba(56, 189, 248, ${state.slashEffect.alpha})`;
+        ctx.lineWidth = 18 * state.slashEffect.alpha;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-220, 0);
+        ctx.lineTo(220, 0);
+        ctx.stroke();
+        ctx.restore();
+        state.slashEffect.alpha -= 0.06;
+      }
+
+      // 3. プレイヤーの剣（手前視点）
+      state.swordAngle += (state.targetSwordAngle - state.swordAngle) * 0.25;
+      ctx.save();
+      ctx.translate(cx, canvas.height - 60);
+      if (state.isGuarding) {
+        // ガード時は横構えで手前に上げる
+        ctx.translate(0, -160);
+        ctx.rotate(Math.PI / 2);
+      } else {
+        ctx.rotate(state.swordAngle);
+      }
+      // 刀身
+      const grad = ctx.createLinearGradient(0, 0, 0, -280);
+      grad.addColorStop(0, "#94a3b8");
+      grad.addColorStop(1, "#f8fafc");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-6, -270);
+      ctx.lineTo(0, -295);
+      ctx.lineTo(6, -270);
+      ctx.lineTo(10, 0);
+      ctx.closePath();
+      ctx.fill();
+      // 鍔（つば）と柄
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillRect(-26, -6, 52, 10);
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(-8, 4, 16, 65);
+      ctx.restore();
+
+      // 4. 判定メッセージ表示
+      if (state.messageTimer > 0) {
+        state.messageTimer--;
+        ctx.font = "bold 36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillStyle = state.messageColor;
+        ctx.fillText(state.message, cx, cy - 210);
+      }
+
+      ctx.restore();
+      requestAnimationFrame(render);
+    }
+    render();
+  </script>
+</body>
+</html>
